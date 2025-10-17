@@ -1,0 +1,20 @@
+# R / Quarto / general
+.Rhistory
+.RData
+.Rproj.user
+.Ruserdata
+__pycache__/
+.ipynb_checkpoints/
+*.nb.html
+
+# Quarto build artifacts
+_site/
+_quarto/
+.quarto/
+.quarto_cache/
+.sass-cache/
+.quarto/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
