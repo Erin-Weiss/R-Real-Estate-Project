@@ -1,0 +1,1204 @@
+---
+title: "R Real Estate Project"
+author: "Erin Weiss"
+format: 
+   html:
+     df-print: paged
+editor: visual
+execute: 
+  warning: false
+  message: false
+---
+
+# Introduction
+
+This project aims to examine national real estate data using R with several variables, including potential subgroups based on location or date and relationships between several variables (visually and through an appropriate hypothesis test).
+
+## Resources
+
+I visited the website <https://www.realtor.com/research/data/> and found the following CSV file to examine.
+
+-   RDC_Inventory_Core_Metrics_State_History.csv
+
+# Step 1 - Read in, Clean, and Prepare Data
+
+## Read in Libraries
+
+```{r, message = FALSE}
+
+library("tidyverse")
+
+library("lubridate")
+
+library("ggpubr")
+
+library("summarytools")
+
+# The libraries "HydroTSM", "descr", "DT", "SemTools" are also used 
+
+```
+
+## Read in Dataset
+
+I used summary() and head() to check for NAs and ensure no extra rows were up top.
+
+```{r}
+State <- read.csv("data/RDC_Inventory_Core_Metrics_State_History.csv")
+
+# summary(State) 
+
+# head(State) 
+
+# I commented out printing the top rows and summary stats for cleanliness in output
+
+```
+
+```{r}
+# Summary of State for Web
+print(dfSummary(State, 
+          varnumbers   = FALSE, 
+          valid.col    = FALSE, 
+          graph.magnif = 0.76),
+      max.tbl.height = 400,
+      method = 'render')
+
+```
+
+```{r}
+# Print top 5 rows in web-friendly format
+DT::datatable(head(State))
+
+```
+
+## Clean Data
+
+```{r}
+State.cleaned <- State %>% 
+     
+     mutate(month_date_yyyymm = as.character(month_date_yyyymm)) %>% 
+     
+     rename(date = month_date_yyyymm) %>% 
+     
+     mutate(date = ym(date)) %>% 
+     
+     mutate(state = as.factor(state)) %>% 
+     
+     mutate(state_id = as.factor(state_id)) %>% 
+     
+     mutate(median_listing_price = as.numeric(median_listing_price)) %>% 
+     
+     mutate(monthly_new_listing_count = new_listing_count * 4) %>% 
+     
+     # needed to adjust above because it was in weekly units (everything else in monthly)
+     
+     mutate(quality_flag = recode_factor(.x = quality_flag, 
+                                         
+                                         `1` = "yes", 
+                                         
+                                         `0` = "no"))
+
+# tail(State.cleaned)
+
+# I used tail to make sure there were no extra rows on bottom. This is commented
+# out to not clutter the output in the PDF. 
+
+###############
+
+# Create the region classifications 
+
+NE.name <- c("Connecticut", "Maine", "Massachusetts", "New Hampshire",
+             
+             "Rhode Island", "Vermont", "New Jersey", "New York",
+             
+             "Pennsylvania")
+
+NE.abrv <- c("CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA")
+
+NE.ref <- c(NE.name,NE.abrv)
+
+MW.name <- c("Indiana", "Illinois", "Michigan", "Ohio", "Wisconsin",
+             
+             "Iowa", "Kansas", "Minnesota", "Missouri", "Nebraska",
+             
+             "North Dakota", "South Dakota")
+
+MW.abrv <- c("IN", "IL", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE",
+             
+             "ND", "SD")
+
+MW.ref <- c(MW.name,MW.abrv)
+
+SE.name <- c("Arkansas", "Louisiana", "Alabama", "Kentucky", "Mississippi",
+             
+             "Tennessee", "District of Columbia", "Florida", "Georgia", 
+             
+             "Delaware", "Maryland", "North Carolina", "South Carolina", 
+             
+             "Virginia", "West Virginia")
+
+SE.abrv <- c("AR","LA", "AL", "KY", "MS", "TN", "DC", "FL", "GA", "DE", "MD", 
+             
+             "NC", "SC", "VA", "WV")
+
+SE.ref <- c(SE.name,SE.abrv)
+
+SW.name <- c("Arizona", "New Mexico", "Texas", "Oklahoma")
+
+SW.abrv <- c("AZ", "NM", "TX", "OK")
+
+SW.ref <- c(SW.name,SW.abrv)
+
+W.name <- c("Washington", "Oregon", "California", "Montana", "Idaho","Nevada", 
+            
+            "Wyoming", "Utah", "Colorado", "Hawaii", "Alaska")
+
+W.abrv <- c("WA", "OR", "CA", "MT", "ID", "NV", "WY", "UT", "CO", "HI", "AK")
+
+W.ref <- c(W.name,W.abrv)
+
+region.list <- list(Northeast = NE.ref,
+                    
+                    Midwest = MW.ref,
+                    
+                    Southwest = SW.ref,
+                    
+                    Southeast = SE.ref,
+                    
+                    West = W.ref)
+
+# Map Source - https://education.nationalgeographic.org/resource/united-states-regions/
+
+###############
+
+small.list <- State.cleaned %>% 
+     
+     select(active_listing_count, median_listing_price, 
+            
+            median_days_on_market, monthly_new_listing_count, 
+            
+            median_square_feet, pending_listing_count, 
+            
+            date, state, state_id) %>% 
+     
+     mutate(month = as.factor(format(date, "%m")), 
+            
+            year = as.factor(format(date, "%Y"))) %>% 
+     
+     subset(state != "marshall islands") %>% 
+     
+     # removing Marshall Islands because it has NAs and throws off rest of numbers
+     # plus, the Marshall Islands are not part of the geographic region I want to analyze
+     
+     mutate(state_id = as.factor(toupper(state_id))) %>% 
+     
+     mutate(across(where(is.factor), str_trim)) %>% 
+     
+     mutate(seasons = hydroTSM::time2season(date, out.fmt = "seasons")) %>% 
+     
+     mutate(region = sapply(state_id, 
+                            
+                     function(x) names(region.list)[grep(x, region.list)])) %>% 
+     
+     mutate_if(is.character, as.factor)
+
+
+# summary(small.list)
+
+# Same as above. Just checked re-coding to make sure it worked properly. 
+# Commented out for web
+
+```
+
+```{r}
+# Summary of State for Web
+print(dfSummary(small.list, 
+          varnumbers   = FALSE, 
+          valid.col    = FALSE, 
+          graph.magnif = 0.76),
+      max.tbl.height = 400,
+      method = 'render')
+
+```
+
+# Step 2 - Examine Variables
+
+Here, I examine several variables from the data set, including measures of central tendency and spread for continuous variables and frequency and relative frequency for categorical variables.
+
+A.  Months (categorical)
+B.  Years (categorical)
+C.  Regions (categorical)
+D.  Seasons (categorical)
+
+<!-- -->
+
+1.  Active Listing Count (continuous)
+2.  Median Listing Price (continuous)
+3.  Median Days on Market (continuous)
+4.  New Listing Count Monthly (continuous)
+5.  Median Square Feet (continuous)
+6.  Pending Listing Count (continuous)(this one has NA for AK)
+
+## A. Months (categorical)
+
+```{r}
+descr::freq(small.list$month, plot = F)
+```
+
+Comments -
+
+All the months have the same observations (306) other than July and August (357).
+
+## B. Years (categorical)
+
+```{r}
+descr::freq(small.list$year, plot = F)
+```
+
+Comments -
+
+All the years have the same observations (612) other than 2016 (306) and 2022 (408).
+
+## C. Regions (categorical)
+
+```{r}
+descr::freq(small.list$region, plot = F)
+```
+
+Comments -
+
+Looking at the table, you see that the Southeast has the most observations. This does make sense, given that the Southeast has the most states in that category (15). The order in terms of number of states in the regions is Southeast (15), Midwest (12), West (11), Northeast (9), and finally Southwest (4). The table of frequencies follows this pattern as well from greatest to least. However, this should not matter as much when we do calculations by median later.
+
+## D. Seasons (categorical)
+
+```{r}
+descr::freq(small.list$seasons, plot = F)
+```
+
+Comments -
+
+Summer has the most observations here, which makes sense given that July and August had more observations (noted earlier). As I mentioned above, we can account for this when we do calculations later.
+
+## 1. Active Listing Count (continuous)
+
+```{r}
+small.list %>%
+     
+     summarise(mean.active = mean(active_listing_count),
+               
+               sd.active = sd(active_listing_count),
+               
+               med.active = median(active_listing_count),
+               
+               iqr.active = IQR(active_listing_count),
+               
+               mode.active = names(sort(table(active_listing_count), 
+                                        
+                                        decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$active_listing_count)
+```
+
+## 2. Median Listing Price (continuous)
+
+```{r}
+small.list %>%
+     
+     summarise(mean.price = mean(median_listing_price),
+               
+               sd.price = sd(median_listing_price),
+               
+               med.price = median(median_listing_price),
+               
+               iqr.price = IQR(median_listing_price),
+               
+               mode.price = names(sort(table(median_listing_price), 
+                                       
+                                       decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$median_listing_price)
+```
+
+## 3. Median Days on Market (continuous)
+
+```{r}
+small.list %>%
+     
+     summarise(mean.days.mkt = mean(median_days_on_market),
+               
+               sd.days.mkt = sd(median_days_on_market),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               iqr.days.mkt = IQR(median_days_on_market),
+               
+               mode.days.mkt = names(sort(table(median_days_on_market), 
+                                          
+                                          decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$median_days_on_market)
+```
+
+## 4. New Listing Count Monthly (continuous)
+
+```{r}
+small.list %>%
+     
+     summarise(mean.new.list.num = mean(monthly_new_listing_count),
+               
+               sd.new.list.num = sd(monthly_new_listing_count),
+               
+               med.new.list.num = median(monthly_new_listing_count),
+               
+               iqr.new.list.num = IQR(monthly_new_listing_count),
+               
+               mode.new.list.num = names(sort(table(monthly_new_listing_count), 
+                                              
+                                              decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$monthly_new_listing_count)
+```
+
+## 5. Median Square Feet (continuous)
+
+```{r}
+small.list %>%
+     
+     summarise(mean.sq.ft = mean(median_square_feet),
+               
+               sd.sq.ft = sd(median_square_feet),
+               
+               med.sq.ft = median(median_square_feet),
+               
+               iqr.sq.ft = IQR(median_square_feet),
+               
+               mode.sq.ft = names(sort(table(median_square_feet), 
+                                       
+                                       decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$median_square_feet)
+```
+
+## 6. Pending Listing Count (continuous)(this one has NA for AK)
+
+```{r}
+small.list %>%
+     
+     drop_na() %>% 
+     
+     summarise(mean.pend.num = mean(pending_listing_count),
+               
+               sd.pend.num = sd(pending_listing_count),
+               
+               med.pend.num = median(pending_listing_count),
+               
+               iqr.pend.num = IQR(pending_listing_count),
+               
+               mode.pend.num = names(sort(table(pending_listing_count), 
+                                          
+                                          decreasing = TRUE))[1]) 
+
+semTools::skew(small.list$pending_listing_count)
+```
+
+### Overall Continuous Variable Comments
+
+Comments -
+
+Most of these variables (except Median sq ft) had a problem with skewness. All of the variables that were skewed were positively skewed (Mode \< Median \< Mean). Since most of the data is very positively skewed, the median or mode would be best to look at rather than the mean for everything except the median sq ft data.
+
+Otherwise, the summary statistics I gathered in this section were that in the US, the median number of active listings is 11895, with an IQR of 19198.5 listings. The mean is 20157.7, with an even higher standard deviation of 23970.85 listings. The mode was 2826 listings.
+
+The median number of monthly median listing price is \$290,358 with an IQR of \$144,971.50. The mean is \$325,052.90, with a standard deviation of \$129,990.10. The mode was \$299,900.
+
+The median number of days on the market is 64 days, with an IQR of 32 days. The mean is 66.37 days with a standard deviation of 25 days. The mode was 64 days.
+
+The median number of monthly new listings on the market is 22000 with an IQR of 36224. The mean is 35187.44, with a standard deviation of 39378.73 listings. The mode was 4816.
+
+Since the median square feet data is more normally distributed, we can look at the mean first. The mean square feet is 1925.015 with a standard deviation of 241.4007 sq ft. The mode is 1800 sq ft. The median is 1936, with an IQR of 256 sq ft.
+
+The pending listing count is the only variable with NA values (listed for Alaska). Otherwise, this data is also positively skewed, and the median number of pending listings on the market is 5330.5 with an IQR of 10186.25. The mean is 9623.955, with a standard deviation of 12488.11 listings. The mode was 68 listings.
+
+# Step 3 - Group Data for Further Exploration
+
+This section will be sorted by state in a few ways.
+
+## Descending Price by State
+
+```{r}
+small.list %>% 
+     
+     group_by(state, region) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count),
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.price))
+```
+
+## Descending Mean Sq Ft by State
+
+```{r}
+small.list %>% 
+     
+     group_by(state, region) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count),
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(mean.sq.ft))
+```
+
+## Descending Median Days on Market by State
+
+```{r}
+small.list %>% 
+     
+     group_by(state, region) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count),
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.days.mkt))
+```
+
+## Ascending Median Days on Market by State
+
+```{r}
+small.list %>% 
+     
+     group_by(state, region) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count),
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(med.days.mkt)
+```
+
+### Comments on by State Grouping
+
+The most expensive places are in the West and Northeast. For Hawaii and DC, it might also be about scarcity--they seem like outliers for median active, median pending, and new listings. The West and South (mainly Southeast, but Texas as well) have the largest homes for sale on average. Vermont and Maine seem like outliers for the Northeast on median days on the market. Otherwise, the homes on the eastern side (Northeast and Southeast) generally have the highest median days on the market. The West has the least days on the market on average. These comments are based on the top 10, so I will only know for sure if further analysis is done.
+
+## Grouped by Month
+
+```{r}
+small.list %>% 
+     
+     group_by(month) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count), 
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count))
+```
+
+## Descending Price by Month
+
+```{r}
+small.list %>% 
+     
+     group_by(month) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count), 
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.price))
+```
+
+### Comments on by Month Grouping
+
+It seems to be seasonal (more comments are in the seasonality section). June has the highest prices, with December having the lowest. February through April also had the lowest active listings but the same amount (roughly) of pending and new listings as other months. December through February also had the longest median on the market values as well.
+
+## Descending Price by Year
+
+```{r}
+small.list %>% 
+     
+     group_by(year) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count), 
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.price))
+```
+
+### Comments on by Year Grouping
+
+Things get more expensive yearly (which makes sense with inflation, too). Active listings are also going down, while pending appears to be going up (as well as price). Median days on the market also seem to be going down over time. This aligns with the news that the housing market was hotter after COVID, and more houses were being sold more quickly.
+
+## Descending Price by Region
+
+```{r}
+small.list %>% 
+     
+     group_by(region) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count), 
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.price))
+```
+
+### Comments on by Region Grouping
+
+The West and Northeast have the highest prices, respectively; the Southwest has the highest mean sq ft, followed by the Western region. The Southeastern and Southwestern areas have the most active listings, but the Midwest has slightly more new listings than the Southeast. Southeastern and Southwestern regions also have the most pending, while the Northeast has the least. The Southeast region has the highest median days market while the West has the least days. The Western region has the least new listings. Also, there could be a mild correlation between the median of active days and price.
+
+## Descending Price by Season
+
+```{r}
+small.list %>% 
+     
+     group_by(seasons) %>% 
+     
+     summarise(med.price = median(median_listing_price),
+               
+               mean.sq.ft = mean(median_square_feet),
+               
+               med.active = median(active_listing_count), 
+               
+               med.pending = median(pending_listing_count, na.rm = T),
+               
+               med.days.mkt = median(median_days_on_market),
+               
+               med.new.listing = median(monthly_new_listing_count)) %>% 
+     
+     arrange(desc(med.price))
+```
+
+### Comments on by Season Grouping
+
+Most of the listings seem to be in autumn. However, most new listings are in summer, spring, autumn, and winter, respectively. Median days on the market also go from lowest to highest, following the same pattern of summer, spring, autumn, and winter. Also, surprisingly, larger spaces are more available in the summer and less in the winter. Perhaps something else is at play to cause that--maybe a lurking variable. Summer has the highest prices, and winter has the lowest. It seems like pending is also seasonal, with the same pattern as price, days on the market, mean sq ft, and new listings.
+
+# Step 4 - Graphing
+
+I created graphs depicting relationships between 2 variables (used or developed in the step above).
+
+1.  Price and Pending
+    -   two continuous
+    -   scatterplot
+2.  Price and Days on Market
+    -   two continuous
+    -   scatterplot
+3.  Price and Season
+    -   one continuous, one categorical
+    -   boxplot
+4.  Price and Month
+    -   one continuous, one categorical
+    -   boxplot
+5.  Price and Region
+    -   one continuous, one categorical
+    -   boxplot
+6.  Price and Year
+    -   one continuous, one categorical
+    -   boxplot
+7.  Price and State
+    -   one continuous, one categorical
+    -   bar chart (in order)
+8.  Price and State
+    -   one continuous, one categorical
+    -   scatterplot
+
+The following graphs seem to show weaker relationships:
+
+9.  Price(Y) and Median Square Feet
+    -   two continuous
+    -   scatterplot
+10. Price(Y) and Active Listing Count
+    -   two continuous
+    -   scatterplot
+11. Price(Y) and Monthly New Listing Count
+    -   two continuous
+    -   scatterplot
+
+## 1. Price and Pending Scatterplot
+
+```{r}
+small.list %>% 
+     
+     ggplot(aes(x = pending_listing_count/10000, 
+                
+                y = median_listing_price/100000)) +
+     
+     geom_point(color = "red4",
+                
+                shape = 18, 
+                
+                size = 2) +
+     
+     stat_smooth(method = "lm", color = "#0245e0") +
+     
+     theme_minimal() + 
+     
+     labs(x = "Number of pending listings (in 10,000s)", 
+          
+          y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Pending Listings Scatterplot")
+```
+
+### Comments on the First Graph
+
+This graph shows the relationship between price and the number of pending listings. There could be a weak to moderate positive correlation based on the graph. This means the more pending listings, the higher the house price goes. This can only be confirmed with more testing.
+
+## 2. Price and Days on Market Scatterplot
+
+```{r}
+small.list %>% 
+     
+     ggplot(aes(x = median_days_on_market, 
+                
+                y = median_listing_price/100000)) +
+     
+     geom_point(color = "red4",
+                
+                shape = 18, 
+                
+                size = 2) +
+     
+     stat_smooth(method = "lm", color = "#0245e0") +
+     
+     theme_minimal() + 
+     
+     labs(x = "Median number of days on market", 
+          
+          y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Median Days on Market Scatterplot")
+```
+
+### Comments on the Second Graph
+
+This graph shows the relationship between price and the number of days on the market. There could be a moderate to strong negative correlation based on the graph. This means the more days on average houses are on the market, the lower the price of houses will go. This can only be confirmed with more testing.
+
+## 3. Price and Season Boxplot
+
+```{r}
+small.list %>%
+     
+     ggplot(aes(reorder(seasons, -median_listing_price/100000),
+                
+                median_listing_price/100000)) +
+     
+     geom_boxplot(aes(fill = seasons), show.legend = F) +
+     
+     scale_fill_manual(values = c("red", "blue", "green4", "purple")) +
+                                             
+     theme_minimal() + 
+     
+     labs(x = "Seasons", 
+          
+          y = "Median house price (in 100,000s)",
+          
+          fill = "Seasons") +
+  
+     ggtitle("Median Price and Seasons Boxplot")
+```
+
+### Comments on the Third Graph
+
+This boxplot graph shows the relationship between price and the season of listing. This graph indicates marginal changes between seasons, but we can only know if this is significant through more testing. Also, of note, in the spring and summer, there are higher outliers in price, which could account for the differences we are seeing between seasons.
+
+## 4. Price and Month Boxplot
+
+```{r}
+small.list %>%
+  
+  ggplot(aes(x = month, y = median_listing_price/100000)) +
+  
+  geom_boxplot(aes(fill = month)) +
+  
+  scale_fill_brewer(palette = "Spectral") +
+  
+  theme_minimal() + 
+  
+  labs(x = "Months", 
+       
+       y = "Median house price (in 100,000s)") +
+  
+  scale_fill_discrete(name = "Months", labels = c("01 - Jan", "02 - Feb", 
+                                                  
+                                                  "03 - Mar", "04 - Apr",
+                                                  
+                                                  "05 - May", "06 - Jun", 
+                                                  
+                                                  "07 - Jul", "08 - Aug",
+                                                  
+                                                  "09 - Sep", "10 - Oct",
+                                                  
+                                                  "11 - Nov", "12 - Dec")) +
+  
+     ggtitle("Median Price and Months Boxplot")
+```
+
+### Comments on the Fourth Graph
+
+This is a boxplot graph that shows the relationship between price and month. This information mirrors the previous boxplot with seasons: spring and summer have marginally higher prices. It is helpful to see which months are the highest and lowest with more granularity. It is also interesting to see that one outlier point for each month gets progressively higher in the summer months until the outliers drop off in September. This could account for the difference we are seeing seasonally.
+
+## 5. Price and Region Boxplot
+
+```{r}
+small.list %>%
+  
+  ggplot(aes(reorder(region, -median_listing_price/100000), 
+             
+             median_listing_price/100000)) +
+  
+  geom_boxplot(aes(fill = region), show.legend = F) +
+  
+  scale_fill_manual(values = c("red", "blue", "green4", 
+                                    
+                                    "purple", "orange")) +
+  
+  theme_minimal() + 
+  
+  labs(x = "Regions in US", 
+       
+       y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Regions Boxplot")
+```
+
+### Comments on the Fifth Graph
+
+This boxplot graph shows the relationship between the price and region of the listing. This indicates that there are substantial differences in price between regions, but we can only know if this is significant through more testing. The Western listings have the highest prices and the Midwest the lowest. Also, the Southeast listings have the most outliers in price.
+
+## 6. Price and Year Boxplot
+
+```{r}
+small.list %>%
+          
+     ggplot(aes(x = year, y = median_listing_price/100000)) +
+          
+     geom_boxplot(aes(fill = year)) +
+          
+     scale_fill_brewer(palette = "Spectral") +
+     
+     theme_minimal() + 
+          
+          labs(x = "Year", 
+               
+               y = "Median house price (in 100,000s)",
+               
+               fill = "Years") +
+  
+     ggtitle("Median Price and Years Boxplot")
+```
+
+### Comments on the Sixth Graph
+
+This is a boxplot graph that shows the relationship between price and year. This indicates that there are notable differences in price over time. You can also see the steeper increase in price since 2020 (COVID).
+
+## 7. Price and State Bar Chart (in order)
+
+```{r}
+ggplot(small.list, aes(x = reorder(state_id, -median_listing_price/100000),
+                       
+                       median_listing_price/100000)) +
+  
+  geom_bar(aes(fill = region), stat = "identity") +
+  
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  
+  labs(x = "States", 
+       
+       y = "Median House Price (in 100,000s)", 
+       
+       fill = "Regions (US)") +
+  
+  ggtitle("Median House Price by State") +
+  
+  theme_minimal()  + 
+  
+  theme(legend.position = c(.55, 0.85),
+        
+        legend.direction = "horizontal")
+```
+
+### Comments on the Seventh Graph
+
+This bar chart graph shows the relationship between the price and the state of the listing. This information mirrors the previous boxplot: the West has the highest prices, and the Midwest has the lowest. This is useful for seeing which states are highest and lowest with more granularity. Hawaii has the highest prices, while West Virginia has the lowest prices.
+
+## 8. Price and State Scatterplot
+
+```{r}
+ggerrorplot(small.list, x = "state_id", 
+            
+            y = "median_listing_price/100000", 
+            
+            desc_stat = "median_iqr", 
+            
+            color = "black",
+            
+            add = "jitter", 
+            
+            add.params = list(color = "lightblue2"), 
+            
+            ggtheme = theme_minimal())  +
+  
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))  +
+  
+  labs(x = "States", 
+       
+       y = "Median House Price (in 100,000s)", 
+       
+       fill = "Regions (US)") +
+  
+  ggtitle("Median House Price by State with Median point and IQR")
+```
+
+### Comments on the Eighth Graph
+
+This scatterplot graph shows the relationship between price and state of listing with the median and IQR shown. I wanted to show the upper and lower bounds of price by state and include the median and IQR. I found the package ggpubr helped to show it best. I wanted to show that because the bar chart helps see the upper limits, not the lower ones. When I tried to do a boxplot instead, it was too crowded to show much. Based on this graph, the state might be a huge indicator of a house's price.
+
+## 9. Price(Y) and Median Square Feet Scatterplot
+
+```{r}
+small.list %>% 
+  
+  ggplot(aes(x = median_square_feet, 
+             
+             y = median_listing_price/100000)) +
+  
+  geom_point(color = "red4",
+             
+             shape = 18, 
+             
+             size = 2) +
+  
+  stat_smooth(method = "lm", color = "#0245e0") +
+  
+  theme_minimal() + 
+  
+  labs(x = "Median Sq Ft", 
+       
+       y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Median Sq Ft Scatterplot")
+```
+
+### Comments on the Ninth Graph
+
+This graph shows a weak negative relationship between Median sq ft and price; this might not make sense on the surface. This could be because of outliers or because there are so many different markets (essentially, the state the listing is in affects price more than sq ft).
+
+## 10. Price(Y) and Active Listing Count Scatterplot
+
+```{r}
+small.list %>% 
+  
+  ggplot(aes(x = active_listing_count/10000, 
+             
+             y = median_listing_price/100000)) +
+  
+  geom_point(color = "red4",
+             
+             shape = 18, 
+             
+             size = 2) +
+  
+  stat_smooth(method = "lm", color = "#0245e0") +
+  
+  theme_minimal() + 
+  
+  labs(x = "Number of active listings (in 10,000s)", 
+       
+       y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Number of Active Listings Scatterplot")
+```
+
+### Comments on the Tenth Graph
+
+This shows very little relationship between number of active listings and price.
+
+## 11. Price(Y) and Monthly New Listing Count Scatterplot
+
+```{r}
+small.list %>% 
+  
+  ggplot(aes(x = monthly_new_listing_count/10000, 
+             
+             y = median_listing_price/100000)) +
+  
+  geom_point(color = "red4",
+             
+             shape = 18, 
+             
+             size = 2) +
+  
+  stat_smooth(method = "lm", color = "#0245e0") +
+  
+  theme_minimal() + 
+  
+  labs(x = "Number of new monthly listings (in 10,000s)", 
+       
+       y = "Median house price (in 100,000s)") +
+  
+     ggtitle("Median Price and Number of New Monthly Listings Scatterplot")
+```
+
+### Comments on the Eleventh Graph
+
+This shows a very weak positive relationship between price and the number of new monthly listings. This could be because the more new listings, the hotter the market is.
+
+# Step 5 - Predictions When Comparing Variables
+
+Based on the graphs and statistics you choose from Steps 2-4, here are the predictions about what I may find when we compare the variables.
+
+1.  Region affects housing prices.
+    -   Based on the graph and other analyses, I think that region will affect price.
+    -   This is also tied to the states variable.
+2.  Season affects housing prices.
+    -   There might be a marginal effect that season has on price. It likely will not have a huge impact, though.
+3.  Pending Listings affect housing prices.
+    -   I think the effect of the number of pending listings on price is marginal (weak positive). It likely will not have a huge impact, though.
+4.  Days on the market affect housing prices.
+    -   I think the effect of the number of days on the market on price is marginal (moderately negative).
+5.  Time (what year it is) affects housing prices.
+    -   What year it is might have a moderate to large effect on price.
+6.  What state the listings are in affects housing prices.
+    -   There might be a large effect on what state the listing is in on price.
+7.  Median sq ft affects housing prices.
+    -   Median sq ft may have a weak to moderate effect on price.
+8.  Active listing count affects housing prices.
+    -   The Active listing count may have a weak to moderate effect on price.
+9.  Monthly new listing count affects housing prices.
+    -   The Monthly new listing count may have a weak to moderate effect on price.
+
+# Step 6 - Hypothesis Testing
+
+For this test, I will do multiple linear regression (with categorical variables), and the alpha is set to .05. I will adjust the variables based on the p-value approach.
+
+## Part 1: Set up the Null and Alternative Hypotheses
+
+**Hypothesis 1: Region affects housing prices.**
+
+-   H0: The slope of the line in regards to region is equal to zero.
+
+-   HA: The slope of the line in regards to region is not equal to zero.
+
+**Hypothesis 2: Season affects housing prices.**
+
+-   H0: The slope of the line in regards to season is equal to zero.
+
+-   HA: The slope of the line in regards to season is not equal to zero.
+
+**Hypothesis 3: The number of pending listings affects housing prices.**
+
+-   H0: The slope of the line in regard to the number of pending listings is equal to zero.
+
+-   HA: The slope of the line in regard to the number of pending listings is not equal to zero.
+
+**Hypothesis 4: Days on the market affects housing prices.**
+
+-   H0: The slope of the line in regard to days on the market is equal to zero.
+
+-   HA: The slope of the line in regard to days on the market is not equal to zero.
+
+**Hypothesis 5: Time (what year it is) affects housing prices.**
+
+-   H0: The slope of the line in regards to Time (what year it is) is equal to zero.
+
+-   HA: The slope of the line in regards to Time (what year it is) is not equal to zero.
+
+**Hypothesis 6: What state the listings are in affects housing prices.**
+
+-   H0: The slope of the line in regards to states is equal to zero.
+
+-   HA: The slope of the line in regards to states is not equal to zero.
+
+**Hypothesis 7: Median sq ft affects housing price.**
+
+-   H0: The slope of the line in regard to median sq ft is equal to zero.
+
+-   HA: The slope of the line in regard to median sq ft is not equal to zero.
+
+**Hypothesis 8: Active listing count affects housing prices.**
+
+-   H0: The slope of the line in regard to the active listing count is equal to zero.
+
+-   HA: The slope of the line in regard to the active listing count is not equal to zero.
+
+**Hypothesis 9: Monthly new listing count affects housing prices.**
+
+-   H0: The slope of the line in regard to the monthly new listing count is equal to zero.
+
+-   HA: The slope of the line in regard to the monthly new listing count is not equal to zero.
+
+## Part 2 and 3: Compute the Test Statistic and Calculate the Probability
+
+```{r}
+lm.small.list <- small.list %>% 
+  
+  select(region, seasons, year, pending_listing_count, 
+         
+         median_square_feet, monthly_new_listing_count, 
+         
+         median_days_on_market, median_listing_price,
+         
+         active_listing_count, state)
+
+
+lmStates <- lm(median_listing_price ~ ., data = lm.small.list)
+
+summary(lmStates)
+
+```
+
+The adjusted r-squared is 0.9542, which is very strong.
+
+Next, we need to start removing variables based on the highest p-value while checking the adjusted r-squared to ensure we are not removing something important.
+
+Since there are categorical variables, we do need to worry about one being significant based on it being a category of another significant variable. In this case, the highest is the active_listing_count variable, with a p-value of 0.432516.
+
+```{r}
+lmStates <- lm(median_listing_price ~ . - active_listing_count, 
+               
+               data = lm.small.list)
+
+summary(lmStates)
+```
+
+The adjusted r-squared is 0.9542, which is the same after removing active_listing_count. This tells us we are on the right track.
+
+We still have insignificant variables, so we want to do that again. The next variable to remove is monthly_new_listing_count, with a p-value of 0.149471.
+
+```{r}
+lmStates <- lm(median_listing_price ~ . 
+               
+               - active_listing_count - monthly_new_listing_count, 
+               
+               data = lm.small.list)
+
+summary(lmStates)
+```
+
+The adjusted r-squared is 0.9542, which is the same after removing monthly_new_listing_count. We removed all the insignificant p-values that were left that were not categorical values tied to significant values. Therefore, this should be the final model.
+
+## Parts 4 and 5: Interpret the Probability and Write a Conclusion
+
+As I mentioned earlier, the adjusted r-squared is 0.9542, which is a strong model.
+
+We see an overall F-statistic in our output with a p-value of \< 2.2e-16, which is less than .05. This indicates that our overall model is significant.
+
+### Hypotheses
+
+**Hypothesis 1: Region affects housing prices.**
+
+The output shows a p-value on the region rows \< .001 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 2: Season affects housing prices.**
+
+The output shows a p-value on the season rows \< .001 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 3: The number of pending listings affects housing prices.**
+
+The output shows a p-value on the pending listings row \< 2e-16 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 4: Days on the market affects housing prices.**
+
+The output shows a p-value on the Days on market row \< 2e-16 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 5: Time (what year it is) affects housing prices.**
+
+The output shows a p-value on the year rows \< .001 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 6: What state the listings are in affects housing prices.**
+
+The output shows a p-value on the state rows \< .001 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 7: Median sq ft affects housing price.**
+
+The output shows a p-value on the Median sq ft row 0.000650 from a t-test, which is significant. This significance means our predictor variable influences the Y variable and that we can reject the null hypothesis and support our alternative hypothesis.
+
+**Hypothesis 8: Active listing count affects housing prices.**
+
+The output shows a p-value on the Active listing count row of 0.432516 from a t-value. This is NOT significant at any appropriate level of alpha. This lack of significance means our predictor variable does NOT influence the Y variable, and we fail to reject the null hypothesis that there is a slope.
+
+**Hypothesis 9: Monthly new listing count affects housing prices.**
+
+The output shows a p-value on the Monthly new listing count row of 0.149471 from a t-value. This is NOT significant at any appropriate level of alpha. This lack of significance means our predictor variable does NOT influence the Y variable, and we fail to reject the null hypothesis that there is a slope.
+
+Our final model finds that the region, seasons, year, pending_listing_count, median_square_feet, median_days_on_market, and which state the listing is are the best predictors of housing price. We also find that the price goes down the more days on the market. Pending_listing_count, median_square_feet, and years as time goes on all had positive relationships with price, so the higher any of those categories are, the higher the housing price will be. These factors explain about 95.42% of the variance in price, which is a strong model.
+
+### Evaluating My Predictions
+
+I was mostly correct in my predictions. I thought that active and new listings would have had a more substantial impact on the model and not been statistically insignificant (other than active listings). I also thought that median sq ft had a weaker relationship with price based on the graph.
+
+# Step 7 - Final Thoughts
+
+As I mentioned earlier, we find that the region, seasons, year, pending_listing_count, median_square_feet, median_days_on_market, and which state the listing is in are the best predictors of housing price.
+
+One of the greatest factors that could affect the results is that much of the data was very heavily skewed, and most of the tests require the data to be normally distributed. Also, the data in certain circumstances might not be linear. Other factors that could affect the results are outliers in the data that can distort the results a bit. Also, there are potentially lurking variables not accounted for in this data set that we could not add to the model that would have made an impact. Examples of lurking variables could be the number of buyers in the market, the number of bidders per house, the difference in listing price vs. sold price, the population of the region, the socioeconomic status of the region, crime rates, the number of schools, house taxes, taxes in general, etc.
+
+Also, some biases could affect our results as well. For certain variables, it is unclear if it affects price or price affects it first--such as median days available on the market. The price may make it take longer to sell in the first place rather than the fact that it is taking longer to sell houses in that market, prompting people to make their house prices lower in the first place.
+
+Finally, of course, there are limitations to my knowledge. Since I am still new at this, there may have been circumstances where there are better tests to perform, transformations of data, better ways to group the data, or better variables to pick at the outset. As I continue to learn more, I hope to gain better strategies for analysis.
