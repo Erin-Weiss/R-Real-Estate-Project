@@ -1,7 +1,7 @@
 # 🏠 R Real Estate Project
 
 **Author:** Erin Weiss  
-**View the full report:** [https://erin-weiss.github.io/R-Real-Estate-Project/](https://erin-weiss.github.io/R-Real-Estate-Project/)
+👉 [**R Real Estate Project (Interactive HTML Report)**](https://erin-weiss.github.io/R-Real-Estate-Project/)
 
 ---
 
@@ -43,6 +43,8 @@ Key steps included:
 
 ---
 
-## 🌐 View the Full Analysis
+## 🔗 Links  
 
-👉 [**R Real Estate Project (Interactive HTML Report)**](https://erin-weiss.github.io/R-Real-Estate-Project/)
+- **Live Github Page:** [Github Page](https://erin-weiss.github.io/R-Real-Estate-Project/)
+- **GitHub Repository:** [View Source Code](https://github.com/Erin-Weiss/R-Real-Estate-Project)
+- **Portfolio Page:** [View on Portfolio](https://erin-weiss.github.io/articles/Real-Estate.html)
