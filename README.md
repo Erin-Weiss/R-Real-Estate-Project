@@ -13,6 +13,12 @@ Analyze U.S. real estate trends from 2016–2022 using state-level data from Rea
 
 ---
 
+## Business Relevance
+
+Understanding which factors drive housing prices — and by how much — has direct value across several industries. Real estate investment firms and REITs use models like this to identify undervalued markets, time acquisitions, and allocate capital to regions with the strongest price trajectories. Mortgage lenders rely on accurate price drivers to assess collateral value, calibrate loan-to-value ratios, and flag markets where prices may be overextended relative to fundamentals. For developers and brokers, the finding that seasonal timing and days-on-market significantly predict price translates into actionable guidance on when to list properties or launch new inventory. A model that explains 95% of price variance provides a strong analytical foundation for any of these decision-making pipelines, reducing reliance on intuition and supporting data-driven strategy at scale.
+
+---
+
 ## Dataset
 
 | Property | Detail |
